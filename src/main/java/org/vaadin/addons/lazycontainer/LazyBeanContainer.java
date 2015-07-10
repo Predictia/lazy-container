@@ -1,27 +1,31 @@
 package org.vaadin.addons.lazycontainer;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import com.vaadin.data.util.BeanContainer;
 import com.vaadin.data.util.BeanItem;
 import com.vaadin.data.util.filter.SimpleStringFilter;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
 /**
  * @author Ondrej Kvasnovsky
  */
-public class LazyBeanContainer extends BeanContainer {
+public class LazyBeanContainer<T> extends BeanContainer<T,T> {
 
-    private SearchCriteria criteria;
-    private DAO dao;
+	private static final long serialVersionUID = 5084213735284978664L;
 
+	private SearchCriteria criteria;
+    private DAO<T> dao;
+    
     private List<OrderByColumn> orderByColumns = new ArrayList<OrderByColumn>();
 
     // min filter string length, after this length is exceeded database calls are allowed
     private int minFilterLength;
 
-    public LazyBeanContainer(Class type, DAO dao, SearchCriteria criteria) {
+    public LazyBeanContainer(Class<T> type, DAO<T> dao, SearchCriteria criteria) {
         super(type);
         this.criteria = criteria;
         this.dao = dao;
@@ -45,26 +49,43 @@ public class LazyBeanContainer extends BeanContainer {
         criteria.setLastCount(count);
     }
 
-    @Override
-    public BeanItem getItem(Object itemId) {
-        return new BeanItem(itemId);
+    @SuppressWarnings("unchecked")
+	@Override
+    public BeanItem<T> getItem(Object itemId) {
+        return new BeanItem<T>((T) itemId);
     }
-
+    
+    private final Map<Integer, T> cachedBeans = new HashMap<Integer, T>();
+    
     @Override
-    public List<?> getItemIds(int startIndex, int numberOfIds) {
+    public T getIdByIndex(int idx) {
+    	Integer index = idx;
+    	if(cachedBeans.containsKey(index)){
+    		return cachedBeans.get(index);
+    	}
+    	return getItemIds(index, 100).get(0);
+    }
+    
+    @Override
+    public List<T> getItemIds(int startIndex, int numberOfIds) {
         filterStringToSearchCriteria();
-        List<?> items = null;
+        List<T> items = null;
         if (isFiltered() && criteria.getFilter() != null) {
             items = findItems(startIndex, numberOfIds);
             criteria.setFilter(null);
         } else if (!isFiltered()) {
             items = findItems(startIndex, numberOfIds);
         }
+        cachedBeans.clear();
+        int i = startIndex;
+        for(T item : items){
+        	cachedBeans.put(i++, item);
+        }
         return items;
     }
 
-    private List<?> findItems(int startIndex, int numberOfIds) {
-        List<?> items;
+    private List<T> findItems(int startIndex, int numberOfIds) {
+        List<T> items;
         items = dao.find(criteria, startIndex, numberOfIds, orderByColumns);
         return items;
     }
